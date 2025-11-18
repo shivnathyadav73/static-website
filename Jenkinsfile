@@ -17,15 +17,15 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                echo "Building Docker image..."
-                sh 'docker build -t myapp:latest .'
+                echo "Building Docker image on Windows..."
+                bat 'docker build -t myapp:latest .'
             }
         }
 
         stage('Deploy') {
             steps {
-                echo "Deploying the project..."
-                sh 'docker run -d -p 8080:8080 myapp:latest'
+                echo "Running Docker container on Windows..."
+                bat 'docker run -d -p 8080:8080 --name myapp_container myapp:latest'
             }
         }
     }
