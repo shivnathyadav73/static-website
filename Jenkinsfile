@@ -1,36 +1,56 @@
 pipeline {
-    agent any
+  agent any
 
-    stages {
-        stage('Checkout') {
-            steps {
-                echo 'Pulling website code...'
-                git branch: 'main', url: 'https://github.com/shivnathyadav73/static-website.git'
-            }
-        }
+  environment {
+    IMAGE = "shivsoftapp/static-site"
+    TAG = "latest"
+  }
 
-        stage('Build Docker Image') {
-            steps {
-                powershell """
-                    docker build -t static-website:latest .
-                """
-            }
-        }
+  stages {
 
-        stage('Run Container') {
-            steps {
-                powershell """
-                    docker stop static-web 2>\$null
-                    docker rm static-web 2>\$null
-                    docker run -d --name static-web -p 9090:80 static-website:latest
-                """
-            }
-        }
+    stage('Checkout Code') {
+      steps {
+        checkout scm
+      }
     }
 
-    post {
-        success {
-            echo "Website running at: http://localhost:9090"
-        }
+    stage('Build Docker Image') {
+      steps {
+        powershell "docker build -t ${IMAGE}:${TAG} ."
+      }
     }
+
+    stage('Push to DockerHub') {
+      steps {
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'dockerhub',
+                usernameVariable: 'DOCKER_USER',
+                passwordVariable: 'DOCKER_PASS'
+            )
+        ]) {
+          powershell 'echo $env:DOCKER_PASS | docker login -u $env:DOCKER_USER --password-stdin'
+          powershell "docker push ${IMAGE}:${TAG}"
+        }
+      }
+    }
+
+    stage('Deploy to Kubernetes') {
+      steps {
+        withCredentials([
+            file(credentialsId: 'kubeconfig_cred', variable: 'KCFG')
+        ]) {
+          powershell "(Get-Content k8s-deployment.yaml) -replace 'DOCKERHUB_USERNAME/static-site:latest', '${IMAGE}:${TAG}' | Set-Content k8s-deployment.yaml"
+          powershell "kubectl --kubeconfig=$env:KCFG apply -f k8s-deployment.yaml"
+          powershell "kubectl --kubeconfig=$env:KCFG rollout status deployment/static-site-deploy"
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      powershell "docker logout || echo 'Logout failed but safe'"
+    }
+  }
 }
