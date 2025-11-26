@@ -10,7 +10,8 @@ pipeline {
 
     stage('Checkout Code') {
       steps {
-        checkout scm
+        git branch: 'main',
+            url: 'https://github.com/shivnathyadav73/static-website.git'
       }
     }
 
@@ -23,11 +24,11 @@ pipeline {
     stage('Push to DockerHub') {
       steps {
         withCredentials([
-            usernamePassword(
-                credentialsId: 'dockerhub',
-                usernameVariable: 'DOCKER_USER',
-                passwordVariable: 'DOCKER_PASS'
-            )
+          usernamePassword(
+            credentialsId: 'dockerhub',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+          )
         ]) {
           powershell 'echo $env:DOCKER_PASS | docker login -u $env:DOCKER_USER --password-stdin'
           powershell "docker push ${IMAGE}:${TAG}"
@@ -38,7 +39,7 @@ pipeline {
     stage('Deploy to Kubernetes') {
       steps {
         withCredentials([
-            file(credentialsId: 'kubeconfig_cred', variable: 'KCFG')
+          file(credentialsId: 'kubeconfig_cred', variable: 'KCFG')
         ]) {
           powershell "(Get-Content k8s-deployment.yaml) -replace 'DOCKERHUB_USERNAME/static-site:latest', '${IMAGE}:${TAG}' | Set-Content k8s-deployment.yaml"
           powershell "kubectl --kubeconfig=$env:KCFG apply -f k8s-deployment.yaml"
